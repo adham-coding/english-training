@@ -1,0 +1,283 @@
+// use prisma-next
+enum UserRole {
+  @@type("pg/text@1")
+
+  USER
+  ADMIN
+}
+
+enum CourseStatus {
+  @@type("pg/text@1")
+
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonStatus {
+  @@type("pg/text@1")
+
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ActivityType {
+  @@type("pg/text@1")
+
+  READING
+  LISTENING
+  WRITING
+  SPEAKING
+  VOCABULARY
+  GRAMMAR
+  QUIZ
+}
+
+enum ActivityStatus {
+  @@type("pg/text@1")
+
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuestionType {
+  @@type("pg/text@1")
+
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING
+  ORDERING
+}
+
+enum AttemptStatus {
+  @@type("pg/text@1")
+
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model User {
+  id           Uuid                       @id @default(uuid())
+  email        String                     @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  role         UserRole                   @default(USER)
+  isActive     Boolean                    @default(true)
+
+  attempts     ActivityAttempt[]
+
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@map("user")
+}
+
+model Level {
+  id           Uuid                       @id @default(uuid())
+  code         String                     @unique
+  name         String
+  description  String?
+  order        Int
+
+  courseLevels CourseLevel[]
+
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([order])
+  @@map("level")
+}
+
+model Course {
+  id          Uuid                       @id @default(uuid())
+  title       String
+  slug        String                     @unique
+  description String?
+  status      CourseStatus               @default(DRAFT)
+
+  levels      CourseLevel[]
+
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([status])
+  @@map("course")
+}
+
+model CourseLevel {
+  id       Uuid   @id @default(uuid())
+  courseId Uuid
+  levelId  Uuid
+
+  course   Course @relation(fields:[courseId], references:[id])
+  level    Level  @relation(fields:[levelId], references:[id])
+
+  units    Unit[]
+
+  @@unique([courseId, levelId])
+  @@index([courseId])
+  @@index([levelId])
+  @@map("course_level")
+}
+
+model Unit {
+  id            Uuid                       @id @default(uuid())
+  courseLevelId Uuid
+  title         String
+  slug          String
+  description   String?
+  order         Int
+
+  courseLevel   CourseLevel                @relation(fields:[courseLevelId], references:[id])
+  lessons       Lesson[]
+
+  createdAt     TimestamptzString          @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@unique([courseLevelId, slug])
+  @@unique([courseLevelId, order])
+  @@index([courseLevelId])
+  @@map("unit")
+}
+
+model Lesson {
+  id          Uuid                       @id @default(uuid())
+  unitId      Uuid
+  title       String
+  slug        String
+  description String?
+  status      LessonStatus               @default(DRAFT)
+  order       Int
+
+  unit        Unit                       @relation(fields:[unitId], references:[id])
+  activities  Activity[]
+
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@unique([unitId, slug])
+  @@unique([unitId, order])
+  @@index([unitId])
+  @@index([status])
+  @@map("lesson")
+}
+
+model Activity {
+  id          Uuid                       @id @default(uuid())
+  lessonId    Uuid
+  type        ActivityType
+  title       String
+  description String?
+  status      ActivityStatus             @default(DRAFT)
+  order       Int
+
+  lesson      Lesson                     @relation(fields:[lessonId], references:[id])
+  questions   Question[]
+  attempts    ActivityAttempt[]
+
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@unique([lessonId, order])
+  @@index([lessonId])
+  @@index([type])
+  @@index([status])
+  @@map("activity")
+}
+
+model Question {
+  id          Uuid                       @id @default(uuid())
+  activityId  Uuid
+  type        QuestionType
+  text        String
+  explanation String?
+  points      Int                        @default(1)
+  order       Int
+
+  activity    Activity                   @relation(fields:[activityId], references:[id])
+  options     QuestionOption[]
+  answers     UserAnswer[]
+
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@unique([activityId, order])
+  @@index([activityId])
+  @@map("question")
+}
+
+model QuestionOption {
+  id         Uuid               @id @default(uuid())
+  questionId Uuid
+  text       String
+  isCorrect  Boolean            @default(false)
+  order      Int
+
+  question   Question           @relation(fields:[questionId], references:[id])
+  answers    UserAnswerOption[]
+
+  @@unique([questionId, order])
+  @@index([questionId])
+  @@map("question_option")
+}
+
+model ActivityAttempt {
+  id          Uuid               @id @default(uuid())
+  userId      Uuid
+  activityId  Uuid
+  status      AttemptStatus      @default(IN_PROGRESS)
+
+  score       Float?
+  maxScore    Float?
+  percentage  Float?
+
+  startedAt   TimestamptzString  @default(now())
+  completedAt TimestamptzString?
+
+  user        User               @relation(fields:[userId], references:[id])
+  activity    Activity           @relation(fields:[activityId], references:[id])
+  answers     UserAnswer[]
+
+  @@index([userId, startedAt])
+  @@index([activityId, startedAt])
+  @@index([status])
+  @@map("activity_attempt")
+}
+
+model UserAnswer {
+  id              Uuid                       @id @default(uuid())
+  attemptId       Uuid
+  questionId      Uuid
+  answerText      String?
+  isCorrect       Boolean?
+  pointsEarned    Float?
+
+  attempt         ActivityAttempt            @relation(fields:[attemptId], references:[id])
+  question        Question                   @relation(fields:[questionId], references:[id])
+  selectedOptions UserAnswerOption[]
+
+  createdAt       TimestamptzString          @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+  @@map("user_answer")
+}
+
+model UserAnswerOption {
+  userAnswerId     Uuid
+  questionOptionId Uuid
+
+  userAnswer       UserAnswer     @relation(fields:[userAnswerId], references:[id])
+  questionOption   QuestionOption @relation(fields:[questionOptionId], references:[id])
+
+  @@id([userAnswerId, questionOptionId])
+  @@index([questionOptionId])
+  @@map("user_answer_option")
+}

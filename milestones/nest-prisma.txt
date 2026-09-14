@@ -1,0 +1,160 @@
+# =================================
+# >>>>>>>>>>>>>>> 1 <<<<<<<<<<<<<<< Preparing Initial Files
+# =================================
+
+# ---------------------------------
+nest new nest-prisma
+# ---------------------------------
+cd nest-prisma
+# ---------------------------------
+pm up
+# ---------------------------------
+cat > pnpm-workspace.yaml <<'EOF'
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true
+  workerd: true
+EOF
+# ---------------------------------
+pm add -D prisma@latest @prisma/cli-engine@latest
+# ---------------------------------
+pm approve-builds
+# ---------------------------------
+pm exec prisma orm init --target postgres --authoring psl
+# ---------------------------------
+pm exec prisma skills sync
+# ---------------------------------
+
+
+# =================================
+# >>>>>>>>>>>>>>> 2 <<<<<<<<<<<<<<< Configuring Initial Database
+# =================================
+
+# ---------------------------------
+sed -i '1s#// use prisma-8#// use prisma-next#' \
+  src/prisma/contract.prisma
+# ---------------------------------
+# Set initial contract.prisma
+# ---------------------------------
+pm exec prisma contract format
+# ---------------------------------
+cat > .env <<'EOF'
+DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+EOF
+# ---------------------------------
+pm exec prisma contract emit --json
+# ---------------------------------
+pm exec prisma migration plan --name init
+# ---------------------------------
+pm exec prisma migration show migrations/app/20260913T1338_init
+# ---------------------------------
+pm exec prisma migration check
+# ---------------------------------
+pm exec prisma db migrate --advance-ref db # Don't use --advance-ref db for production
+# ---------------------------------
+pm exec prisma migration status
+# ---------------------------------
+pm exec prisma db verify
+# ---------------------------------
+
+
+# =================================
+# >>>>>>>>>>>>>>> 3 <<<<<<<<<<<<<<< Integration Prisma Service
+# =================================
+
+# ---------------------------------
+cat > src/prisma/db.ts <<'EOF'
+import 'dotenv/config';
+import postgres from '@prisma/orm-postgres/runtime';
+
+import type { Contract } from './contract.d';
+import contractJson from './contract.json' with { type: 'json' };
+
+export const db = postgres<Contract>({
+  contractJson,
+  url: process.env['DATABASE_URL']!,
+});
+
+let connection: Promise<void> | undefined;
+
+export function connectDatabase(): Promise<void> {
+  connection ??= db
+    .connect()
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      connection = undefined;
+      throw error;
+    });
+
+  return connection;
+}
+EOF
+# ---------------------------------
+nest g mo prisma
+# ---------------------------------
+nest g s prisma
+# ---------------------------------
+cat > src/prisma/prisma.service.ts <<'EOF'
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+
+import { connectDatabase, db } from './db.js';
+
+@Injectable()
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
+  get client() {
+    return db;
+  }
+
+  async onModuleInit(): Promise<void> {
+    await connectDatabase();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await db.close();
+  }
+}
+EOF
+# ---------------------------------
+cat > src/prisma/prisma.module.ts <<'EOF'
+import { Global, Module } from '@nestjs/common';
+
+import { PrismaService } from './prisma.service.js';
+
+@Global()
+@Module({
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
+EOF
+# ---------------------------------
+
+
+# =================================
+# >>>>>>>>>>>>>>> 4 <<<<<<<<<<<<<<< Changing Database Migrations
+# =================================
+
+# ---------------------------------
+# Change contract.prisma
+# ---------------------------------
+# 2. Yangi contract'ni chiqaring
+pm exec prisma contract emit
+# ---------------------------------
+# 3. O'zgarishni migratsiyaga aylantiring (nomi o'zgarishni tasvirlashi kerak)
+pm exec prisma migration plan --name <migration_name>
+# ---------------------------------
+# 4. SQL'ni ko'rib chiqing (tavsiya etiladi, ayniqsa production uchun)
+pm exec prisma migration show migrations/app/20260913T1439_migration_name
+# ---------------------------------
+# 5. Yaxlitlikni tekshiring
+pm exec prisma migration check
+# ---------------------------------
+# 6. Bazaga qo'llang
+pm exec prisma db migrate --advance-ref db # Don't use --advance-ref db for production
+# ---------------------------------
+# 7. Holatni tasdiqlang
+pm exec prisma migration status
+# ---------------------------------
+# 8. Drift yo'qligini tekshiring
+pm exec prisma db verify
+# ---------------------------------

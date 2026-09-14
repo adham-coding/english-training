@@ -1,0 +1,35 @@
+{
+  "name": "english-training",
+  "version": "0.1.0",
+  "description": "",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @english-training/web --filter @english-training/api dev",
+    "dev:web": "pnpm --filter @english-training/web dev",
+    "dev:api": "pnpm --filter @english-training/api start:dev",
+    "add:web": "pnpm --filter @english-training/web add",
+    "add:api": "pnpm --filter @english-training/api add",
+    "gen:api": "pnpm --filter @english-training/api exec nest g",
+    "build:web": "pnpm --filter @english-training/web build",
+    "build:api": "pnpm --filter @english-training/api build",
+    "build": "pnpm --recursive build",
+    "lint": "pnpm --recursive lint",
+    "test": "pnpm --recursive test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.4",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.3.4",
+  "type": "module"
+}
